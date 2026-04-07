@@ -8,14 +8,14 @@ struct User {
 
 impl User {
     fn to_byts(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
         let id_bytes = self.id.to_le_bytes();
+        let name_len_bytes = (self.name.len() as u16).to_le_bytes();
         let name_bytes = self.name.to_string().into_bytes();
-
-        id_bytes.into_iter().for_each(|b| bytes.push(b));
-        name_bytes.into_iter().for_each(|b| bytes.push(b));
-
-        bytes
+        [
+            id_bytes.as_slice(),
+            name_len_bytes.as_slice(),
+            name_bytes.as_slice(),
+        ].concat()
     }
 
 
@@ -23,7 +23,10 @@ impl User {
         let id_bytes: [u8; 4] = bytes[0..4].try_into().unwrap();
         let id = u32::from_le_bytes(id_bytes);
 
-        let name_bytes: Vec<u8> = bytes[4..bytes.len()].try_into().unwrap();
+        let name_len_bytes: [u8; 2] = bytes[4..6].try_into().unwrap();
+        let name_len = u16::from_le_bytes(name_len_bytes);
+
+        let name_bytes: Vec<u8> = bytes[6.. (6 + name_len) as usize].try_into().unwrap();
         let name = String::from_utf8(name_bytes).unwrap();
 
         User {
@@ -63,9 +66,38 @@ fn main() {
         insert(&mut db, user);
     }
 
-    let users1 = read_all(&mut db);
+    // let users1 = read_all(&mut db);
 
-    dbg!(users1);
+    // dbg!(users1);
+    
+    let user = find_by_id(&mut db, 10);
+    dbg!(user);
+
+}
+
+
+fn find_by_id(db: &mut DB, id: u32) -> Option<User> {
+    for i in (4..db.free_start).step_by(4) {
+        db.file.seek(std::io::SeekFrom::Start(i as u64)).unwrap();
+        let mut user_s = [0u8; 2];
+        db.file.read_exact(&mut user_s).unwrap();
+        let user_s = u16::from_le_bytes(user_s);
+
+        db.file.seek(std::io::SeekFrom::Start((i + 2) as u64)).unwrap();
+        let mut user_e = [0u8; 2];
+        db.file.read_exact(&mut user_e).unwrap();
+        let user_e = u16::from_le_bytes(user_e);
+
+        db.file.seek(std::io::SeekFrom::Start(user_s as u64)).unwrap();
+        let mut user = vec![0u8; (user_e - user_s) as usize];
+        db.file.read_exact(&mut user).unwrap();
+        let user = User::from_byts(&user);
+        if user.id == id {
+            return Option::Some(user);
+        }
+    }
+
+    Option::None
 }
 
 fn insert(db: &mut DB, user: &User) {
@@ -154,4 +186,6 @@ fn init_db(path: &str) -> DB {
         file
     }
 }
+
+
 
