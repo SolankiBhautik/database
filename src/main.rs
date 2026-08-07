@@ -1,5 +1,5 @@
 use std::{fs::{File, OpenOptions}, io::{Read, Seek, Write}, os::unix::fs::MetadataExt};
-
+// mainthing for conflic
 #[derive(Debug)]
 struct User {
     id: u32,
